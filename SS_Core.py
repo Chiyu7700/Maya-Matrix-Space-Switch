@@ -1,12 +1,17 @@
 import maya.api.OpenMaya as om
 
-#selection = om.MSelectionList()
-sl = om.MGlobal.getActiveSelectionList()
-sl_path = sl.getDagPath(0)
+#trace DagPath for an object
+def get_dag_path(node_name):
+    selection = om.MSelectionList()
+    selection.add(node_name)
+    return selection.getDagPath(0)
 
-print(sl_path.fullPathName())
-print(sl_path.exclusiveMatrixInverse(), 'asibe happy')
+#calculate offset between the leader and follower
+def calculate_offset_offset(leader, follower):
+    leader_dag = get_dag_path(leader)
+    follower_dag = get_dag_path(follower)
 
-sl_world_matrix = sl_path.inclusiveMatrix()
+    leader_mtx = leader_dag.inclusiveMatrix()
+    follower_inv = follower_dag.exclusiveMatrixInverse()
 
-print(sl_world_matrix)
+    return leader_mtx * follower_inv
