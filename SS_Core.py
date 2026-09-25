@@ -22,53 +22,51 @@ def build_space_switch(spaces, ctrl, attr_name="space"):
         return
 
     ctrl_path = get_dag_path(ctrl)
-    ctrl_node = om.MFnDependencyNode(ctrl_path.node())
+    ctrl_fn = om.MFnDependencyNode(ctrl_path.node())
+
+    enum_fn = om.MFnEnumAttribute()
+    space_attr = enum_fn.create(attr_name, attr_name, 0)
+
+    for i, space in enumerate(spaces):
+        enum_fn.addField(space, i)
 
     mod = om.MDGModifier()
+    mod.addAttribute(ctrl_path.node(), space_attr)
 
-    enum_attr = om.MFnEnumAttribute()
-    space_enum = enum_attr.create(attr_name, attr_name, 0)
-
-    for i in range(len(spaces)):
-        enum_attr.addField(spaces[i], i)
-
-    mod.addAttribute(ctrl_path.node(), space_enum)
-
-    choice = mod.createNode("choice")
-    choice_nd = om.MFnDependencyNode(choice)
+    choice_node = mod.createNode("choice")
+    choice_fn = om.MFnDependencyNode(choice_node)
 
     mod.connect(
-        ctrl_node.findPlug(attr_name, False),
-        choice_nd.findPlug("selector", False)
+        ctrl_fn.findPlug(attr_name, False),
+        choice_fn.findPlug("selector", False)
     )
 
-    for i in range(len(spaces)):
-        space = spaces[i]
+    for i, space in enumerate(spaces):
+        mult_node = mod.createNode("multMatrix")
+        mult_fn = om.MFnDependencyNode(mult_node)
 
-        mult = mod.createNode("multMatrix")
-        mult_node = om.MFnDependencyNode(mult)
+        offset_mtx = calculate_space_offset(space, ctrl)
+        offset_data = om.MFnMatrixData().create(offset_mtx)
 
-        offset = calculate_space_offset(space, ctrl)
-        offset_obj = om.MFnMatrixData().create(offset)
-
-        mult_node.findPlug("matrixIn", False).elementByLogicalIndex(0).setMObject(offset_obj)
+        matrix_in = mult_fn.findPlug("matrixIn", False)
+        matrix_in.elementByLogicalIndex(0).setMObject(offset_data)
 
         space_path = get_dag_path(space)
-        space_node = om.MFnDependencyNode(space_path.node())
+        space_fn = om.MFnDependencyNode(space_path.node())
 
         mod.connect(
-            space_node.findPlug("worldMatrix", False).elementByLogicalIndex(0),
-            mult_node.findPlug("matrixIn", False).elementByLogicalIndex(1)
+            space_fn.findPlug("worldMatrix", False).elementByLogicalIndex(0),
+            matrix_in.elementByLogicalIndex(1)
         )
 
         mod.connect(
-            mult_node.findPlug("matrixSum", False),
-            choice_nd.findPlug("input", False).elementByLogicalIndex(i)
+            mult_fn.findPlug("matrixSum", False),
+            choice_fn.findPlug("input", False).elementByLogicalIndex(i)
         )
 
     mod.connect(
-        choice_nd.findPlug("output", False),
-        ctrl_node.findPlug("offsetParentMatrix", False)
+        choice_fn.findPlug("output", False),
+        ctrl_fn.findPlug("offsetParentMatrix", False)
     )
 
     mod.doIt()
