@@ -11,10 +11,12 @@ def calculate_space_offset(space, ctrl):
     space_dag = get_dag_path(space)
     ctrl_dag = get_dag_path(ctrl)
 
-    space_mtx = space_dag.inclusiveMatrix()
-    ctrl_par_inv = ctrl_dag.exclusiveMatrixInverse()
+    #ctrl world matrix without its own channels (offsetParentMatrix * parent)
+    ctrl_local = om.MFnTransform(ctrl_dag).transformation().asMatrix()
+    ctrl_no_local = ctrl_local.inverse() * ctrl_dag.inclusiveMatrix()
 
-    return space_mtx * ctrl_par_inv
+    #offset is the ctrl relative to the space
+    return ctrl_no_local * space_dag.inclusiveMatrixInverse()
 
 #Set up space switch with choice node
 def build_space_switch(spaces, ctrl, attr_name="space"):
@@ -26,12 +28,15 @@ def build_space_switch(spaces, ctrl, attr_name="space"):
 
     enum_fn = om.MFnEnumAttribute()
     space_attr = enum_fn.create(attr_name, attr_name, 0)
+    enum_fn.keyable = True
 
     for i, space in enumerate(spaces):
         enum_fn.addField(space, i)
 
     mod = om.MDGModifier()
     mod.addAttribute(ctrl_path.node(), space_attr)
+    #attr only exists after doIt, need it before findPlug
+    mod.doIt()
 
     choice_node = mod.createNode("choice")
     choice_fn = om.MFnDependencyNode(choice_node)
@@ -57,6 +62,12 @@ def build_space_switch(spaces, ctrl, attr_name="space"):
         mod.connect(
             space_fn.findPlug("worldMatrix", False).elementByLogicalIndex(0),
             matrix_in.elementByLogicalIndex(1)
+        )
+
+        #cancel out the ctrl's parent so it isn't applied twice
+        mod.connect(
+            ctrl_fn.findPlug("parentInverseMatrix", False).elementByLogicalIndex(0),
+            matrix_in.elementByLogicalIndex(2)
         )
 
         mod.connect(
