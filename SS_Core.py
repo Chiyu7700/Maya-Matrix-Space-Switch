@@ -26,6 +26,14 @@ def build_space_switch(spaces, ctrl, attr_name="space"):
     ctrl_path = get_dag_path(ctrl)
     ctrl_fn = om.MFnDependencyNode(ctrl_path.node())
 
+    #ctrl's parentInverseMatrix already has offsetParentMatrix in it (loops back), use the parent's own one
+    parent_inv_plug = None
+    if ctrl_path.length() > 1:
+        parent_path = om.MDagPath(ctrl_path)
+        parent_path.pop()
+        parent_fn = om.MFnDependencyNode(parent_path.node())
+        parent_inv_plug = parent_fn.findPlug("worldInverseMatrix", False).elementByLogicalIndex(0)
+
     enum_fn = om.MFnEnumAttribute()
     space_attr = enum_fn.create(attr_name, attr_name, 0)
     enum_fn.keyable = True
@@ -64,11 +72,9 @@ def build_space_switch(spaces, ctrl, attr_name="space"):
             matrix_in.elementByLogicalIndex(1)
         )
 
-        #cancel out the ctrl's parent so it isn't applied twice
-        mod.connect(
-            ctrl_fn.findPlug("parentInverseMatrix", False).elementByLogicalIndex(0),
-            matrix_in.elementByLogicalIndex(2)
-        )
+        #cancel out the ctrl's parent so it isn't applied twice (nothing to cancel if ctrl is under world)
+        if parent_inv_plug is not None:
+            mod.connect(parent_inv_plug, matrix_in.elementByLogicalIndex(2))
 
         mod.connect(
             mult_fn.findPlug("matrixSum", False),
