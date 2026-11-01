@@ -63,11 +63,28 @@ class SpaceSwitchUI(QtWidgets.QDialog):
         self.build_btn.setMinimumHeight(35)
         main_layout.addWidget(self.build_btn)
 
+        main_layout.addSpacing(10)
+
+        switch_label = QtWidgets.QLabel("Switch Space:")
+        main_layout.addWidget(switch_label)
+
+        switch_layout = QtWidgets.QHBoxLayout()
+        self.space_combo = QtWidgets.QComboBox()
+        self.key_check = QtWidgets.QCheckBox("Key")
+        self.key_check.setToolTip("Key the switch on the current frame")
+        self.switch_btn = QtWidgets.QPushButton("Switch")
+
+        switch_layout.addWidget(self.space_combo, 1)
+        switch_layout.addWidget(self.key_check)
+        switch_layout.addWidget(self.switch_btn)
+        main_layout.addLayout(switch_layout)
+
     def connect_signals(self):
         self.add_space_btn.clicked.connect(self.add_spaces)
         self.remove_space_btn.clicked.connect(self.remove_spaces)
         self.set_ctrl_btn.clicked.connect(self.set_ctrl)
         self.build_btn.clicked.connect(self.build)
+        self.switch_btn.clicked.connect(self.switch_space)
 
     def get_spaces(self):
         return [self.space_list.item(i).text() for i in range(self.space_list.count())]
@@ -89,6 +106,7 @@ class SpaceSwitchUI(QtWidgets.QDialog):
             cmds.warning("Select a control first")
             return
         self.ctrl_field.setText(sel[0])
+        self.refresh_switch_spaces()
 
     def build(self):
         spaces = self.get_spaces()
@@ -106,6 +124,26 @@ class SpaceSwitchUI(QtWidgets.QDialog):
 
         SS_Core.build_space_switch(spaces, ctrl)
         print(f"Built space switch on {ctrl}")
+        self.refresh_switch_spaces()
+
+    #fill the dropdown with the spaces from the ctrl's enum
+    def refresh_switch_spaces(self):
+        self.space_combo.clear()
+        ctrl = self.ctrl_field.text()
+        if not cmds.objExists(ctrl) or not cmds.attributeQuery("space", node=ctrl, exists=True):
+            return
+
+        enum_names = cmds.attributeQuery("space", node=ctrl, listEnum=True)[0]
+        self.space_combo.addItems(enum_names.split(":"))
+        self.space_combo.setCurrentIndex(cmds.getAttr(ctrl + ".space"))
+
+    def switch_space(self):
+        ctrl = self.ctrl_field.text()
+        if self.space_combo.count() == 0 or not cmds.objExists(ctrl):
+            cmds.warning("Build a space switch on the control first")
+            return
+
+        SS_Core.match_switch(ctrl, self.space_combo.currentIndex(), key=self.key_check.isChecked())
 
 
 #keep a reference so the window doesnt get garbage collected
