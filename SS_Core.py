@@ -1,5 +1,15 @@
+import os
+
 import maya.api.OpenMaya as om
 import maya.cmds as cmds
+
+#last build's modifier, SS_Undo picks it up to put it on the undo queue
+pending_mod = None
+
+#load the undo plugin that sits next to this file
+def load_undo_plugin():
+    if not cmds.pluginInfo("SS_Undo", query=True, loaded=True):
+        cmds.loadPlugin(os.path.join(os.path.dirname(__file__), "SS_Undo.py"))
 
 #trace DagPath for an object
 def get_dag_path(obj):
@@ -63,7 +73,8 @@ def build_space_switch(spaces, ctrl, attr_name="space"):
         offset_data = om.MFnMatrixData().create(offset_mtx)
 
         matrix_in = mult_fn.findPlug("matrixIn", False)
-        matrix_in.elementByLogicalIndex(0).setMObject(offset_data)
+        #set through the modifier so undo/redo covers it too
+        mod.newPlugValue(matrix_in.elementByLogicalIndex(0), offset_data)
 
         space_path = get_dag_path(space)
         space_fn = om.MFnDependencyNode(space_path.node())
@@ -89,29 +100,40 @@ def build_space_switch(spaces, ctrl, attr_name="space"):
 
     mod.doIt()
 
+    #hand the modifier to the undo command so the whole build is one ctrl+z
+    global pending_mod
+    pending_mod = mod
+    load_undo_plugin()
+    cmds.ssUndoableMod()
+
 #switch space without the ctrl popping
 def match_switch(ctrl, new_index, attr_name="space", key=False):
     space_plug = ctrl + "." + attr_name
     if cmds.getAttr(space_plug) == new_index:
         return
 
-    #remember where the ctrl is before touching anything (keying below can change it)
-    world_mtx = cmds.xform(ctrl, query=True, worldSpace=True, matrix=True)
+    #group everything into one undo step, finally makes sure the chunk closes even if something errors
+    cmds.undoInfo(openChunk=True, chunkName="match_switch")
+    try:
+        #remember where the ctrl is before touching anything (keying below can change it)
+        world_mtx = cmds.xform(ctrl, query=True, worldSpace=True, matrix=True)
 
-    channels = ["translateX", "translateY", "translateZ", "rotateX", "rotateY", "rotateZ", attr_name]
-    if key:
-        #key the frame before so the old space holds right up to the switch
-        frame = cmds.currentTime(query=True)
-        for channel in channels:
-            #insert keeps the curve shape, normal key if the channel has no anim yet
-            animated = cmds.keyframe(ctrl, attribute=channel, query=True, keyframeCount=True)
-            cmds.setKeyframe(ctrl, attribute=channel, time=frame - 1, insert=bool(animated))
+        channels = ["translateX", "translateY", "translateZ", "rotateX", "rotateY", "rotateZ", attr_name]
+        if key:
+            #key the frame before so the old space holds right up to the switch
+            frame = cmds.currentTime(query=True)
+            for channel in channels:
+                #insert keeps the curve shape, normal key if the channel has no anim yet
+                animated = cmds.keyframe(ctrl, attribute=channel, query=True, keyframeCount=True)
+                cmds.setKeyframe(ctrl, attribute=channel, time=frame - 1, insert=bool(animated))
 
-    #switch then put it back, xform with worldSpace changes translate/rotate to make up for the new space
-    cmds.setAttr(space_plug, new_index)
-    cmds.xform(ctrl, worldSpace=True, matrix=world_mtx)
+        #switch then put it back, xform with worldSpace changes translate/rotate to make up for the new space
+        cmds.setAttr(space_plug, new_index)
+        cmds.xform(ctrl, worldSpace=True, matrix=world_mtx)
 
-    if key:
-        cmds.setKeyframe(ctrl, attribute=channels)
-        #enum should never blend between spaces
-        cmds.keyTangent(ctrl, attribute=attr_name, outTangentType="step")
+        if key:
+            cmds.setKeyframe(ctrl, attribute=channels)
+            #enum should never blend between spaces
+            cmds.keyTangent(ctrl, attribute=attr_name, outTangentType="step")
+    finally:
+        cmds.undoInfo(closeChunk=True)

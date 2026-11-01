@@ -10,7 +10,7 @@
 
 -----
 
-Copy `SS_Core.py` and `SS_ui.py` to your 📁`Documents/maya/scripts` directory
+Copy `SS_Core.py`, `SS_ui.py` and `SS_Undo.py` to your 📁`Documents/maya/scripts` directory
 
 Then open the Script Editor in Maya and run this in a Python tab:
 
@@ -22,7 +22,7 @@ SS_ui.show_ui()
 You can middle mouse drag those two lines onto a shelf to make a button for it.
 
 > [!Note]
-> The UI uses PySide6 so it needs Maya 2025 or newer.
+> The UI uses PySide6 so it needs Maya 2025 or newer. `SS_Undo.py` is a small plugin that gets loaded automatically the first time you build, you don't need to load it yourself.
 
 -----
 
@@ -80,13 +80,11 @@ Some things I learned making it:
 * Matrix order really matters. I had the offset backwards at first and the control went twice as far as it should.
 * My first fix for the control's parent used its own parentInverseMatrix, but that already includes offsetParentMatrix so it looped back into itself and the control drifted after a few switches. Using the parent's worldInverseMatrix fixed it.
 * MDGModifier doesn't do anything until doIt(), so you can't findPlug an attribute you just added before calling it.
+* MDGModifier changes also don't go on Maya's undo queue by themselves. To get Ctrl+z working I had to write a small MPxCommand (`SS_Undo.py`) that holds onto the modifier and calls its undoIt/doIt.
 
 -----
 
 ### Planned_Features
-
-* Undo support
-> Undoing a switch takes a few presses right now and the build can't be undone at all.
 
 * Locked channels
 > If the control's translate/rotate are locked, Switch can't match it and the control still pops.
@@ -99,6 +97,9 @@ Some things I learned making it:
 
 * Switching over a frame range
 > Match and key a switch across a whole range instead of one frame at a time.
+
+* Drag and Drop Installer
+> Ease of use drag and drop installer to avoid having to manually place files.
 
 <br>
 
